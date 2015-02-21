@@ -2,6 +2,8 @@ package com.tubularlabs;
 
 import org.apache.commons.cli.*;
 
+import java.util.LinkedHashMap;
+
 
 public class CsvToSSTable {
     public static void main(String[] args) {
@@ -61,10 +63,22 @@ public class CsvToSSTable {
         return options;
     }
 
-    private static void migrate(String cqlStatement, String mapping, String csvPath, String outputPath) {
+    private static void migrate(String cqlStatement, String mappingDefinition, String csvPath, String outputPath) {
+        LinkedHashMap<String, Integer> mapping = readMapping(mappingDefinition);
         System.out.println(cqlStatement);
         System.out.println(mapping);
         System.out.println(csvPath);
         System.out.println(outputPath);
+    }
+
+    private static LinkedHashMap<String,Integer> readMapping(String mapping) {
+        LinkedHashMap<String, Integer> parsedMapping = new LinkedHashMap<String, Integer>();
+
+        for (String fieldDefinition: mapping.split(",")) {
+            String[] nameAndValue = fieldDefinition.split(":");
+            parsedMapping.put(nameAndValue[0], Integer.parseInt(nameAndValue[1]));
+        }
+
+        return parsedMapping;
     }
 }
