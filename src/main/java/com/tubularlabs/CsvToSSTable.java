@@ -13,12 +13,17 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 
 
 public class CsvToSSTable {
+    static ByteBuffer columnByteBuffer = ByteBuffer.allocate(65535);  // MySQL TEXT type
+
     public static void main(String[] args) {
         Options options = defineOptions();
         CommandLineParser parser = new GnuParser();
@@ -82,6 +87,8 @@ public class CsvToSSTable {
         List<String> mappedFields = new LinkedList<String>(mapping.keySet());
         String insertStatement = getInsertStatement(cfMetaData, mappedFields);
 
+        columnByteBuffer.order(ByteOrder.BIG_ENDIAN);
+
         // Magic from original snippet (https://github.com/yukim/cassandra-bulkload-example)
         Config.setClientMode(true);
 
@@ -107,8 +114,12 @@ public class CsvToSSTable {
             throw new RuntimeException("Can't read source csv file.", e);
         }
 
+        List<String> columns;
+        byte delimiter = 1;
+
         while (lineIterator.hasNext()) {
-            System.out.println(lineIterator.nextLine());
+            columns = splitStringByByte(lineIterator.nextLine(), delimiter);
+            System.out.println(columns.toString());
         }
 
         try {
@@ -156,5 +167,23 @@ public class CsvToSSTable {
                 StringUtils.join(fields, ", "),
                 StringUtils.repeat("?", ", ", fields.size())
         );
+    }
+
+    private static List<String> splitStringByByte(String source, byte splitter) {
+        List<String> splitString = new ArrayList<String>();
+
+        for (byte oneByte: source.getBytes()) {
+            if (oneByte == splitter) {
+                columnByteBuffer.flip();
+                byte[] column = new byte[columnByteBuffer.limit()];
+                columnByteBuffer.get(column);
+                splitString.add(new String(column));
+                columnByteBuffer.clear();
+            } else {
+                columnByteBuffer.put(oneByte);
+            }
+        }
+
+        return splitString;
     }
 }
