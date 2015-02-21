@@ -5,10 +5,14 @@ import org.apache.cassandra.config.Config;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.statements.CreateTableStatement;
 import org.apache.cassandra.exceptions.RequestValidationException;
+import org.apache.cassandra.io.sstable.CQLSSTableWriter;
 import org.apache.commons.cli.*;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.LineIterator;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -78,13 +82,39 @@ public class CsvToSSTable {
         List<String> mappedFields = new LinkedList<String>(mapping.keySet());
         String insertStatement = getInsertStatement(cfMetaData, mappedFields);
 
-        // magic from original snippet (https://github.com/yukim/cassandra-bulkload-example)
+        // Magic from original snippet (https://github.com/yukim/cassandra-bulkload-example)
         Config.setClientMode(true);
 
         // Create output directory that has keyspace and table name in the path
         File outputDir = new File(outputPath + File.separator + cfMetaData.ksName + File.separator + cfMetaData.cfName);
         if (!outputDir.exists() && !outputDir.mkdirs()) {
             throw new RuntimeException("Cannot create output directory: " + outputDir);
+        }
+
+        // Prepare SSTable writer
+        CQLSSTableWriter writer = CQLSSTableWriter
+                .builder()
+                .inDirectory(outputDir)
+                .forTable(cqlStatement)
+                .using(insertStatement)
+                .build();
+
+        // Read source file
+        LineIterator lineIterator;
+        try {
+            lineIterator = FileUtils.lineIterator(new File(csvPath), "UTF-8");
+        } catch (IOException e) {
+            throw new RuntimeException("Can't read source csv file.", e);
+        }
+
+        while (lineIterator.hasNext()) {
+            System.out.println(lineIterator.nextLine());
+        }
+
+        try {
+            writer.close();
+        } catch (IOException e) {
+            throw new RuntimeException("Can't close sstable writer.", e);
         }
     }
 
