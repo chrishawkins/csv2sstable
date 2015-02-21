@@ -1,20 +1,26 @@
 package com.tubularlabs;
 
 import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.statements.CreateTableStatement;
+import org.apache.cassandra.db.marshal.*;
+import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.io.sstable.CQLSSTableWriter;
 import org.apache.commons.cli.*;
+import org.apache.commons.cli.ParseException;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.LineIterator;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.text.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -23,6 +29,7 @@ import java.util.List;
 
 public class CsvToSSTable {
     static ByteBuffer columnByteBuffer = ByteBuffer.allocate(65535);  // MySQL TEXT type
+    static SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
 
     public static void main(String[] args) {
         Options options = defineOptions();
@@ -82,10 +89,11 @@ public class CsvToSSTable {
     }
 
     private static void migrate(String cqlStatement, String mappingDefinition, String csvPath, String outputPath) {
-        HashMap<String, Integer> mapping = readMapping(mappingDefinition);
         CFMetaData cfMetaData = getCFMetadata(cqlStatement);
+        HashMap<String, Integer> mapping = readMapping(mappingDefinition);
         List<String> mappedFields = new LinkedList<String>(mapping.keySet());
         String insertStatement = getInsertStatement(cfMetaData, mappedFields);
+        HashMap<String, AbstractType<?>> mappingTypes = readMappingTypes(cfMetaData, mappedFields);
 
         columnByteBuffer.order(ByteOrder.BIG_ENDIAN);
 
@@ -115,11 +123,22 @@ public class CsvToSSTable {
         }
 
         List<String> columns;
+        List<Object> values = new LinkedList<Object>();
         byte delimiter = 1;
 
         while (lineIterator.hasNext()) {
             columns = splitStringByByte(lineIterator.nextLine(), delimiter);
-            System.out.println(columns.toString());
+
+            for (String field: mappedFields) {
+                values.add(getValue(columns.get(mapping.get(field)), mappingTypes.get(field)));
+            }
+
+            try {
+                writer.addRow(values);
+            } catch (IOException e) {
+            } catch (InvalidRequestException e) {}
+
+            values.clear();
         }
 
         try {
@@ -169,6 +188,16 @@ public class CsvToSSTable {
         );
     }
 
+    private static HashMap<String,AbstractType<?>> readMappingTypes(CFMetaData cfMetaData, List<String> mappedFields) {
+        HashMap<String,AbstractType<?>> mappedTypes = new HashMap<String, AbstractType<?>>();
+        for (String field: mappedFields) {
+            ColumnDefinition columnDefinition = cfMetaData.getColumnDefinition(ByteBuffer.wrap(field.getBytes()));
+            mappedTypes.put(field, columnDefinition.getValidator());
+        }
+
+        return mappedTypes;
+    }
+
     private static List<String> splitStringByByte(String source, byte splitter) {
         List<String> splitString = new ArrayList<String>();
 
@@ -185,5 +214,30 @@ public class CsvToSSTable {
         }
 
         return splitString;
+    }
+
+    private static Object getValue(String csvValue, AbstractType<?> columnType) {
+        if (csvValue.length() == 0)
+            return null;
+
+        if (columnType instanceof Int32Type)
+            return Integer.parseInt(csvValue);
+        else if (columnType instanceof IntegerType)
+            return new BigInteger(csvValue);
+        else if (columnType instanceof LongType)
+            return Long.parseLong(csvValue);
+        else if (columnType instanceof DoubleType)
+            return Double.valueOf(csvValue);
+        else if (columnType instanceof FloatType)
+            return Float.parseFloat(csvValue);
+        else if (columnType instanceof TimestampType) {
+            try {
+                return dateFormat.parse(csvValue);
+            } catch (java.text.ParseException e) {
+                return null;
+            }
+        }
+
+        return csvValue;
     }
 }
