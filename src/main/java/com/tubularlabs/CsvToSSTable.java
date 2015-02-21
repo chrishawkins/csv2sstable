@@ -1,5 +1,9 @@
 package com.tubularlabs;
 
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.cql3.QueryProcessor;
+import org.apache.cassandra.cql3.statements.CreateTableStatement;
+import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.commons.cli.*;
 
 import java.util.LinkedHashMap;
@@ -65,8 +69,10 @@ public class CsvToSSTable {
 
     private static void migrate(String cqlStatement, String mappingDefinition, String csvPath, String outputPath) {
         LinkedHashMap<String, Integer> mapping = readMapping(mappingDefinition);
-        System.out.println(cqlStatement);
+        CFMetaData cfMetaData = getCFMetadata(cqlStatement);
+
         System.out.println(mapping);
+        System.out.println(cfMetaData);
         System.out.println(csvPath);
         System.out.println(outputPath);
     }
@@ -80,5 +86,24 @@ public class CsvToSSTable {
         }
 
         return parsedMapping;
+    }
+
+    private static CFMetaData getCFMetadata(String cql) {
+        CreateTableStatement statement;
+        CFMetaData cfMetaData;
+
+        try {
+            statement = (CreateTableStatement) QueryProcessor.parseStatement(cql).prepare().statement;
+        } catch (RequestValidationException e) {
+            throw new RuntimeException("Error configuring SSTable reader.", e);
+        }
+
+        try {
+            cfMetaData = statement.getCFMetaData();
+        } catch (RequestValidationException e) {
+            throw new RuntimeException("Error initializing CFMetadata from CQL.", e);
+        }
+
+        return cfMetaData;
     }
 }

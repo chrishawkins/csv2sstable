@@ -9,6 +9,7 @@ repositories {
 
 dependencies {
     compile group: 'commons-cli', name: 'commons-cli', version: '1.2'
+    compile group: 'org.apache.cassandra', name: 'cassandra-all', version: '2.0.11'
 }
 
 task fatJar(type: Jar) {
