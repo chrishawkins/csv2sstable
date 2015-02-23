@@ -25,5 +25,5 @@ For development you can use:
 This tool requires refactoring and it will be done later.
 Also, some additional features are planned:
 
-- support for all complex types (currently only list<text> and set<text> are supported)
+- support for all complex types (currently only `list<text>` and `set<text>` are supported)
 - wrapper for running this converter on Hadoop
