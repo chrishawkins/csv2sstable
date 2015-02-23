@@ -27,6 +27,8 @@ import java.util.*;
 public class CsvToSSTable {
     static ByteBuffer columnByteBuffer = ByteBuffer.allocate(100 * 1024 * 1024);  // Max column size is 100 MB, useful for list fields
     static SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
+    static byte columnDelimiter = 1;
+    static byte listDelimiter = 2;
 
     public static void main(String[] args) {
         Options options = defineOptions();
@@ -131,17 +133,14 @@ public class CsvToSSTable {
         String csvValue;
         AbstractType<?> valueType;
         Object value;
-        byte delimiter = 1;
         int progress = 0;
 
         while (lineIterator.hasNext()) {
             progress ++;
-            columns = splitStringByByte(lineIterator.nextLine(), delimiter);
+            columns = splitStringByByte(lineIterator.nextLine(), columnDelimiter);
             
-            if (debug) {
+            if (debug)
                 System.out.println(String.format("----------------- ROW %d -----------------", progress));
-                System.out.println(columns);
-            }
 
             for (String field: mappedFields) {
                 csvValue = columns.get(mapping.get(field));
@@ -149,7 +148,7 @@ public class CsvToSSTable {
                 value = getValue(csvValue, valueType);
                 
                 if (debug)
-                    System.out.println(String.format("Field: %s, Type: %s, Value: %s", field, valueType.getClass().getSimpleName(), csvValue));
+                    System.out.println(String.format("Field: %s, Type: %s, Value: %s", field, valueType.getClass().getSimpleName(), value));
                 
                 values.add(value);
             }
@@ -256,6 +255,10 @@ public class CsvToSSTable {
             return Double.valueOf(csvValue);
         else if (columnType instanceof FloatType)
             return Float.parseFloat(csvValue);
+        else if (columnType instanceof ListType)
+            return splitStringByByte(csvValue, listDelimiter);
+        else if (columnType instanceof SetType)
+            return new HashSet<String>(splitStringByByte(csvValue, listDelimiter));
         else if (columnType instanceof TimestampType) {
             try {
                 return dateFormat.parse(csvValue);
