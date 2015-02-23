@@ -21,14 +21,11 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.text.*;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 
 
 public class CsvToSSTable {
-    static ByteBuffer columnByteBuffer = ByteBuffer.allocate(65535);  // MySQL TEXT type
+    static ByteBuffer columnByteBuffer = ByteBuffer.allocate(100 * 1024 * 1024);  // Max column size is 100 MB, useful for list fields
     static SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
 
     public static void main(String[] args) {
@@ -41,7 +38,8 @@ public class CsvToSSTable {
                     commandLine.getOptionValue("cql"),
                     commandLine.getOptionValue("mapping"),
                     commandLine.getOptionValue("csv"),
-                    commandLine.getOptionValue("output")
+                    commandLine.getOptionValue("output"),
+                    commandLine.hasOption("debug")
             );
         } catch (ParseException e) {
             HelpFormatter formatter = new HelpFormatter();
@@ -84,11 +82,17 @@ public class CsvToSSTable {
                         .isRequired()
                         .create()
         );
+        options.addOption(
+                OptionBuilder
+                        .withLongOpt("debug")
+                        .withDescription("Show how mapping will be performed.")
+                        .create()
+        );
 
         return options;
     }
 
-    private static void migrate(String cqlStatement, String mappingDefinition, String csvPath, String outputPath) {
+    private static void migrate(String cqlStatement, String mappingDefinition, String csvPath, String outputPath, boolean debug) {
         CFMetaData cfMetaData = getCFMetadata(cqlStatement);
         HashMap<String, Integer> mapping = readMapping(mappingDefinition);
         List<String> mappedFields = new LinkedList<String>(mapping.keySet());
@@ -124,13 +128,30 @@ public class CsvToSSTable {
 
         List<String> columns;
         List<Object> values = new LinkedList<Object>();
+        String csvValue;
+        AbstractType<?> valueType;
+        Object value;
         byte delimiter = 1;
+        int progress = 0;
 
         while (lineIterator.hasNext()) {
+            progress ++;
             columns = splitStringByByte(lineIterator.nextLine(), delimiter);
+            
+            if (debug) {
+                System.out.println(String.format("----------------- ROW %d -----------------", progress));
+                System.out.println(columns);
+            }
 
             for (String field: mappedFields) {
-                values.add(getValue(columns.get(mapping.get(field)), mappingTypes.get(field)));
+                csvValue = columns.get(mapping.get(field));
+                valueType = mappingTypes.get(field);
+                value = getValue(csvValue, valueType);
+                
+                if (debug)
+                    System.out.println(String.format("Field: %s, Type: %s, Value: %s", field, valueType.getClass().getSimpleName(), csvValue));
+                
+                values.add(value);
             }
 
             try {
@@ -197,22 +218,27 @@ public class CsvToSSTable {
 
         return mappedTypes;
     }
+    
+    private static String getStringFromBuffer() {
+        columnByteBuffer.flip();
+        byte[] column = new byte[columnByteBuffer.limit()];
+        columnByteBuffer.get(column);
+        columnByteBuffer.clear();
+        return new String(column);
+    }
 
     private static List<String> splitStringByByte(String source, byte splitter) {
         List<String> splitString = new ArrayList<String>();
 
         for (byte oneByte: source.getBytes()) {
             if (oneByte == splitter) {
-                columnByteBuffer.flip();
-                byte[] column = new byte[columnByteBuffer.limit()];
-                columnByteBuffer.get(column);
-                splitString.add(new String(column));
-                columnByteBuffer.clear();
+                splitString.add(getStringFromBuffer());
             } else {
                 columnByteBuffer.put(oneByte);
             }
         }
 
+        splitString.add(getStringFromBuffer());
         return splitString;
     }
 
