@@ -277,7 +277,7 @@ public class CsvToSSTable {
         else if (columnType instanceof SetType)
             return new HashSet<String>(Arrays.asList(csvValue.split(listDelimiter)));
         else if (columnType instanceof MapType)
-            return getHashMap(Arrays.asList(csvValue.split(listDelimiter)));
+            return getHashMap(Arrays.asList(csvValue.substring(1, csvValue.length() - 2).split(listDelimiter)));
         else if (columnType instanceof TimestampType) {
             try {
                 return dateFormat.parse(csvValue);
