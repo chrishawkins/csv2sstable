@@ -26,7 +26,7 @@ import java.util.*;
 
 
 public class CsvToSSTable {
-    static CharBuffer columnByteBuffer = CharBuffer.allocate(100 * 1024 * 1024);  // Max column size is 100 MB, useful for list fields
+    static CharBuffer columnByteBuffer = CharBuffer.allocate(1024 * 1024);
     static SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
     static char columnDelimiter = ',';
     static char quoteChar = '"';
