@@ -1,9 +1,9 @@
 apply plugin: 'java'
 apply plugin: 'application'
 
-sourceCompatibility = 1.5
+sourceCompatibility = 1.7
 mainClassName = "com.tubularlabs.CsvToSSTable"
-version = '1.0'
+version = '1.1'
 
 repositories {
     mavenCentral()

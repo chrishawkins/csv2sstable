@@ -18,6 +18,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.io.File;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.CharBuffer;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.text.*;
@@ -25,10 +26,11 @@ import java.util.*;
 
 
 public class CsvToSSTable {
-    static ByteBuffer columnByteBuffer = ByteBuffer.allocate(100 * 1024 * 1024);  // Max column size is 100 MB, useful for list fields
+    static CharBuffer columnByteBuffer = CharBuffer.allocate(100 * 1024 * 1024);  // Max column size is 100 MB, useful for list fields
     static SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
-    static byte columnDelimiter = 1;
-    static byte listDelimiter = 2;
+    static char columnDelimiter = ',';
+    static char quoteChar = '"';
+    static String listDelimiter = ",";
 
     public static void main(String[] args) {
         Options options = defineOptions();
@@ -101,8 +103,6 @@ public class CsvToSSTable {
         String insertStatement = getInsertStatement(cfMetaData, mappedFields);
         HashMap<String, AbstractType<?>> mappingTypes = readMappingTypes(cfMetaData, mappedFields);
 
-        columnByteBuffer.order(ByteOrder.BIG_ENDIAN);
-
         // Magic from original snippet (https://github.com/yukim/cassandra-bulkload-example)
         Config.setClientMode(true);
 
@@ -137,7 +137,7 @@ public class CsvToSSTable {
 
         while (lineIterator.hasNext()) {
             progress ++;
-            columns = splitStringByByte(lineIterator.nextLine(), columnDelimiter);
+            columns = splitStringAccountForQuotes(lineIterator.nextLine(), columnDelimiter);
             
             if (debug)
                 System.out.println(String.format("----------------- ROW %d -----------------", progress));
@@ -220,25 +220,42 @@ public class CsvToSSTable {
     
     private static String getStringFromBuffer() {
         columnByteBuffer.flip();
-        byte[] column = new byte[columnByteBuffer.limit()];
+        char[] column = new char[columnByteBuffer.limit()];
         columnByteBuffer.get(column);
         columnByteBuffer.clear();
         return new String(column);
     }
 
-    private static List<String> splitStringByByte(String source, byte splitter) {
+    private static List<String> splitStringAccountForQuotes(String source, char splitter) {
         List<String> splitString = new ArrayList<String>();
+        boolean inQuotes = false;
 
-        for (byte oneByte: source.getBytes()) {
-            if (oneByte == splitter) {
+        for (char character: source.toCharArray()) {
+            if (character == splitter && !inQuotes) {
                 splitString.add(getStringFromBuffer());
+            } else if (character == quoteChar) {
+                inQuotes = !inQuotes;
             } else {
-                columnByteBuffer.put(oneByte);
+                columnByteBuffer.put(character);
             }
         }
 
         splitString.add(getStringFromBuffer());
         return splitString;
+    }
+
+    private static HashMap<String, Double> getHashMap(Collection<String> list) {
+
+        HashMap<String, Double> map = new HashMap<String, Double>();
+
+        for (String pair : list) {
+            String[] bits = pair.split(":");
+            String key = bits[0].trim().replace("'", "");
+            double value = Double.parseDouble(bits[1].trim());
+            map.put(key, value);
+        }
+
+        return map;
     }
 
     private static Object getValue(String csvValue, AbstractType<?> columnType) {
@@ -256,9 +273,11 @@ public class CsvToSSTable {
         else if (columnType instanceof FloatType)
             return Float.parseFloat(csvValue);
         else if (columnType instanceof ListType)
-            return splitStringByByte(csvValue, listDelimiter);
+            return csvValue.split(listDelimiter);
         else if (columnType instanceof SetType)
-            return new HashSet<String>(splitStringByByte(csvValue, listDelimiter));
+            return new HashSet<String>(Arrays.asList(csvValue.split(listDelimiter)));
+        else if (columnType instanceof MapType)
+            return getHashMap(Arrays.asList(csvValue.split(listDelimiter)));
         else if (columnType instanceof TimestampType) {
             try {
                 return dateFormat.parse(csvValue);
