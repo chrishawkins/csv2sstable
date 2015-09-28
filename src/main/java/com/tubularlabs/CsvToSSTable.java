@@ -26,7 +26,7 @@ import java.util.*;
 
 
 public class CsvToSSTable {
-    static CharBuffer columnByteBuffer = CharBuffer.allocate(1024 * 1024);
+    static CharBuffer columnByteBuffer = CharBuffer.allocate(200000);
     static SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
     static char columnDelimiter = ',';
     static char quoteChar = '"';
