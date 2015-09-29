@@ -251,7 +251,7 @@ public class CsvToSSTable {
         for (String pair : list) {
             String[] bits = pair.split(":");
             String key = bits[0].trim().replace("'", "");
-            double value = Double.parseDouble(bits[1].trim());
+            double value = Double.valueOf(bits[1].trim());
             map.put(key, value);
         }
 
@@ -277,7 +277,7 @@ public class CsvToSSTable {
         else if (columnType instanceof SetType)
             return new HashSet<String>(Arrays.asList(csvValue.split(listDelimiter)));
         else if (columnType instanceof MapType)
-            return getHashMap(Arrays.asList(csvValue.substring(1, csvValue.length() - 2).split(listDelimiter)));
+            return getHashMap(Arrays.asList(csvValue.replace("\"", "").split(listDelimiter)));
         else if (columnType instanceof TimestampType) {
             try {
                 return dateFormat.parse(csvValue);
