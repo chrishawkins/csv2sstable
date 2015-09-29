@@ -258,6 +258,10 @@ public class CsvToSSTable {
         return map;
     }
 
+    private static String sanitizeDictionary(String dictionary) {
+        return dictionary.replace("{", "").replace("}", "");
+    }
+
     private static Object getValue(String csvValue, AbstractType<?> columnType) {
         if (csvValue.length() == 0)
             return null;
@@ -277,7 +281,7 @@ public class CsvToSSTable {
         else if (columnType instanceof SetType)
             return new HashSet<String>(Arrays.asList(csvValue.split(listDelimiter)));
         else if (columnType instanceof MapType)
-            return getHashMap(Arrays.asList(csvValue.replace("\"", "").split(listDelimiter)));
+            return getHashMap(Arrays.asList(sanitizeDictionary(csvValue).split(listDelimiter)));
         else if (columnType instanceof TimestampType) {
             try {
                 return dateFormat.parse(csvValue);
